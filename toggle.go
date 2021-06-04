@@ -17,6 +17,8 @@ import (
 	"sync"
 )
 
+var isWindows = runtime.GOOS == "windows"
+
 // https://github.com/google/re2/wiki/Syntax
 
 // Make a deck from a notion file.
@@ -137,49 +139,6 @@ var (
 		NL
 )
 
-func testPattern(fp string) error {
-	// headings: for grep it works with "^#\{1,3\}\\s.\+$", escape {} and + because of shell.
-	// 			and grep -E "^#{1,3}\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
-	// 				BUT watchout: this pattern does not exclude the code blocks (python).
-	// toggle titles: grep -E "^-\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
-
-	tog := `
-- How to switch to a certain window (labelled with a number)
-
-	first, you need to finish work. 
-	Then you can go home.
-
-- How to switch to another pane
-
-	<ident>
-
-`
-	tr := regexp.MustCompile(toggleExp)
-	fmt.Println("Match toggle:")
-	fmt.Printf("Pattern: %q\n", tr.String())
-	fmt.Printf("Search: %#v\n", tog)
-	fmt.Println("Matches:")
-	for _, slice := range tr.FindAllStringSubmatch(tog, -1) {
-		fmt.Printf("%#v\n", slice)
-	}
-
-	head := `
-# Terminal multiplexer
-bar foo
-## Modes
-### Commands foo bar 
-`
-
-	hr := regexp.MustCompile(headingExp)
-	fmt.Println("\nMatch heading:")
-	fmt.Printf("Pattern: %q\n", hr.String())
-	fmt.Printf("Search: %#v\n", head)
-	hMatches := hr.FindAllStringSubmatch(head, -1)
-	fmt.Printf("Matches: %#v\n", hMatches)
-	fmt.Printf("%v\n", headingToTag([]byte(hMatches[0][0]))) // not 0, 0 is full string
-	return nil
-}
-
 // pageTitleToDeckNames takes the filepath of the exported file and returns the
 // title of the page, which is included in the exported files filename.
 // "{name inc. spaces} {id}.md"
@@ -217,8 +176,18 @@ type card2 struct {
 	tags  [][]byte
 }
 
-// Process is the many entry point which turns a file into an array of cards.
-func Process(fp string, cards chan<- card2) error {
+func (c card2) String() string {
+	var sb strings.Builder
+	sb.WriteString("Card{Front: " + string(c.front))
+	sb.WriteString(fmt.Sprintf(" Back: %q Tags: ", string(c.back)))
+	sb.WriteString(string(bytes.Join(c.tags, []byte{' '})))
+	sb.WriteByte('}')
+
+	return sb.String()
+}
+
+// Process is the many entry point which turns a file into an importable anki deck.
+func Process(fp string) error {
 	raw, err := os.ReadFile(fp)
 	if err != nil {
 		return err
@@ -226,12 +195,18 @@ func Process(fp string, cards chan<- card2) error {
 	errc := make(chan error)
 	hIdxc := make(chan [2]int) // header: start:end of file byte array excluding newline.
 	tIdxc := make(chan [4]int) // toggle: front, back: fstart:fend bstart, bend; excluding newline and indentation.
+	cards := make(chan card2)
+	editedCards := make(chan card2)
+
+	filename := MdToAnkiFilename(fp)
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(5)
 	go findHeadings(raw, hIdxc, &wg)
 	go findToggles(raw, tIdxc, &wg)
 	go combine(raw, hIdxc, tIdxc, cards, errc, &wg)
+	go Prompter(cards, editedCards, &wg)
+	go Serialiser(filename, editedCards, &wg)
 	wg.Wait()
 
 	return nil
@@ -385,6 +360,7 @@ func combine(raw []byte, headings <-chan [2]int, toggles <-chan [4]int, cards ch
 		card.tags = stack.bytes()
 		cards <- card
 	}
+	close(cards)
 	wg.Done()
 }
 
@@ -400,7 +376,7 @@ func init() {
 		front = []byte("Front")
 		back  = []byte("Back")
 		tags  = []byte("Tags")
-		nl = []byte{'\n'}
+		nl    = []byte{'\n'}
 	)
 	fill := func(dst []byte, srcs ...[]byte) int {
 		// var off int
@@ -436,7 +412,6 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) 
 	cmd := getCmd(fp)
 	exe := exec.Command(cmd[0], cmd[1:]...)
 	for card := range cards {
-		fmt.Printf("Reading %v from cards.\n", card)
 		// write to file
 		if err := createPrompt(fp, &card); err != nil {
 			log.Panic(err)
@@ -461,7 +436,6 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) 
 	if err := os.Remove(fp); err != nil {
 		log.Panic(err)
 	}
-	fmt.Println("Closing editedCards channel after all cards have been read.")
 	close(editedCards)
 	wg.Done()
 }
@@ -486,17 +460,16 @@ func getCmd(fp string) (cmd []string) {
 		cmd = []string{cmdx, fp}
 	case "linux", "darwin":
 		if editor := os.Getenv("EDITOR"); editor != "" {
-			linuxEditor = editor
+			if editor == "vi" || editor == "vim" {
+				fmt.Println("md2Anki does not currently support vim, because vim requires an emulated terminal.")
+			} else {
+				linuxEditor = editor
+			}
 		}
 		cmd = append(linuxShell, linuxEditor+" "+fp)
 	default:
 		panic("unknown platform.")
 	}
-	// cmdx, err := exec.LookPath(defaultEditor)
-	// if err != nil {
-	// 	log.Panicf("Cannot find editor executable %q", defaultEditor)
-	// }
-	// return []string{cmdx, fp}
 	return
 }
 
@@ -511,10 +484,9 @@ func createPrompt(fp string, card *card2) error {
 
 	file.Write(frontSep)
 	file.Write(card.front)
-	file.Write([]byte{'\n', '\n'})
+	file.WriteRune('\n')
 	file.Write(backSep)
 	file.Write(card.back)
-	file.WriteRune('\n')
 	file.Write(tagsSep)
 	for i := range card.tags {
 		file.Write(card.tags[i])
@@ -530,93 +502,56 @@ var skipNote = errors.New("Skip this note.")
 // with the skipNote error. The user may include mutliple notes in one file.
 // If the file is empty or begins with "skip", readPrompt returns the skipNote error.
 func readPrompt(fp string) ([]card2, error) {
-	file, err := os.Open(fp)
+	raw, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, err
 	}
-	defer saveClose(file)
 
 	// check if file should be skipped explicitly:
-	b := make([]byte, len(skipLit))
-	_, err = file.Read(b)
-	if err != nil {
-		if err == io.EOF {
-			return nil, skipNote
-		}
-		return nil, err
+	if len(raw) < len(skipLit) {
+		return nil, skipNote
 	}
-	if bytes.EqualFold(b, skipLit) {
+	if bytes.EqualFold(raw[0:len(skipLit)], skipLit) {
 		return nil, skipNote
 	}
 
-	// parse
-	var cards = make([]card2, 1)
-	var idx int
-	
-	const (
-		// do not reorder
-		FRONT = iota
-		BACK
-		TAGS
-		numOps
-		unkown
-	)
-	var op = unkown
-	next := func (op int) int {
-		if op == unkown {
-			return FRONT
-		}
-		return (op + 1) % numOps
+	// Parse the file
+	pattern := string(frontSep) +
+		`(.*\s)+` +
+		string(backSep) +
+		`(.*\s)+` +
+		string(tagsSep) +
+		`(.*\s)+` // set s flag: . also matches newline
+	re := regexp.MustCompile(pattern)
+
+	matches := re.FindAllSubmatchIndex(raw, -1)
+	cards := make([]card2, 0, len(matches))
+	for _, idxs := range matches {
+		// fmt.Printf("%q\n", raw[idxs[0]:idxs[1]]) // whole
+		// fmt.Printf("%q\n", raw[idxs[2]:idxs[3]]) // front (no newlines permitted, so right match), includes newline
+		// fmt.Printf("%q\n", raw[idxs[4]:idxs[5]]) // last match of back
+		// fmt.Printf("%q\n", raw[idxs[6]:idxs[7]]) // last match of tags inc. \n
+		card := card2{}
+
+		// front
+		start, end := idxs[2], idxs[3]
+		card.front = raw[start : end-len("\n")]
+
+		// back
+		start, end = end+len(backSep), idxs[5]
+		card.back = raw[start:end]
+
+		// tags:
+		start, end = end+len(tagsSep), idxs[7]
+		card.tags = bytes.Split(raw[start:end], []byte{'\n'})
+
+		fmt.Println(card)
+		cards = append(cards, card)
 	}
-	consume := func (op int, buf bytes.Buffer, card *card2) {
-		if buf.Len() == 0 {
-			return
-		}
-		switch op {
-		case FRONT:
-			card.front = bytes.TrimRight(buf.Bytes(), " \n") // TODO(liamvdv): problem with \r\n?
-		case BACK:
-			card.back = buf.Bytes()
-		case TAGS:
-			card.tags = bytes.Split(buf.Bytes(), []byte{'\n'}) // s. o.
-		default:
-			log.Panicf("Consume with invalid op %d.", op)
-		}
-	}
 
-	var buf bytes.Buffer 
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-
-		if bytes.HasPrefix(line, subsep) {
-			var nextOp int
-			switch {
-			case bytes.HasPrefix(line, frontSep):
-				nextOp = FRONT
-			case bytes.HasPrefix(line, backSep):
-				nextOp = BACK
-			case bytes.HasPrefix(line, tagsSep):
-				nextOp = TAGS
-			default:
-				log.Panicf("The allowed 5 tilde seperators are:\n\t%v\t%v\t%v", frontSep, backSep, tagsSep)
-			}
-			if nextOp != next(op) {
-				log.Panic("Each note must contain Front, Back, and Tags in that order.")
-			}
-			consume(op, buf, &cards[idx])
-			buf.Reset()
-			idx++
-
-			op = nextOp
-			continue
-		}
-		buf.Write(line)
-	}
-	// last consume because there is no end seperator
-	if buf.Len() != 0 {
-		consume(TAGS, buf, &cards[idx])
+	if len(matches) == 0 {
+		log.Printf("Could not find any matching pattern in:\n%s\nBe sure not to mess with the separators.", string(raw))
+		return nil, nil
 	}
 
 	return cards, nil
@@ -656,7 +591,6 @@ func Serialiser(fp string, cards <-chan card2, wg *sync.WaitGroup) {
 	w := csv.NewWriter(out)
 
 	for card := range cards {
-		fmt.Printf("Serialiser read card: %v\n", card)
 		w.Write([]string{string(card.front), string(card.back), string(bytes.Join(card.tags, []byte{' '}))})
 		n++
 		w.Flush()
@@ -671,10 +605,7 @@ func Serialiser(fp string, cards <-chan card2, wg *sync.WaitGroup) {
 
 
 
-
-
-/////////////////////////////////////////////////////////////////////////////
-// we need to drop the first heading as it is the page name.
+// test func
 func process(fp string) {
 	raw, err := os.ReadFile(fp)
 	if err != nil {
@@ -709,6 +640,45 @@ func process(fp string) {
 	fmt.Printf("%#v\n", string(raw))
 }
 
-// later use bufio.Reader() for reading in files, which provides io.RuneReader.
-// io.RuneReader is required by regexp Regexp.FindReaderIndex and Regexp.FindReaderSubmatchIndex.
-// https://golang.org/pkg/regexp/#example_MatchString
+func testPattern(fp string) error {
+	// headings: for grep it works with "^#\{1,3\}\\s.\+$", escape {} and + because of shell.
+	// 			and grep -E "^#{1,3}\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
+	// 				BUT watchout: this pattern does not exclude the code blocks (python).
+	// toggle titles: grep -E "^-\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
+
+	tog := `
+- How to switch to a certain window (labelled with a number)
+
+	first, you need to finish work. 
+	Then you can go home.
+
+- How to switch to another pane
+
+	<ident>
+
+`
+	tr := regexp.MustCompile(toggleExp)
+	fmt.Println("Match toggle:")
+	fmt.Printf("Pattern: %q\n", tr.String())
+	fmt.Printf("Search: %#v\n", tog)
+	fmt.Println("Matches:")
+	for _, slice := range tr.FindAllStringSubmatch(tog, -1) {
+		fmt.Printf("%#v\n", slice)
+	}
+
+	head := `
+# Terminal multiplexer
+bar foo
+## Modes
+### Commands foo bar 
+`
+
+	hr := regexp.MustCompile(headingExp)
+	fmt.Println("\nMatch heading:")
+	fmt.Printf("Pattern: %q\n", hr.String())
+	fmt.Printf("Search: %#v\n", head)
+	hMatches := hr.FindAllStringSubmatch(head, -1)
+	fmt.Printf("Matches: %#v\n", hMatches)
+	fmt.Printf("%v\n", headingToTag([]byte(hMatches[0][0]))) // not 0, 0 is full string
+	return nil
+}
