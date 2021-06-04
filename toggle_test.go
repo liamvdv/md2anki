@@ -5,5 +5,7 @@ import (
 )
 
 func TestPattern(t *testing.T) {
-	testPattern("")
+	testPattern()
+	fp := "" // required you to export a page.
+	process(fp)
 }

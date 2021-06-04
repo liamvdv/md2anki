@@ -603,8 +603,6 @@ func Serialiser(fp string, cards <-chan card2, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-
-
 // test func
 func process(fp string) {
 	raw, err := os.ReadFile(fp)
@@ -640,7 +638,7 @@ func process(fp string) {
 	fmt.Printf("%#v\n", string(raw))
 }
 
-func testPattern(fp string) error {
+func testPattern() error {
 	// headings: for grep it works with "^#\{1,3\}\\s.\+$", escape {} and + because of shell.
 	// 			and grep -E "^#{1,3}\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
 	// 				BUT watchout: this pattern does not exclude the code blocks (python).

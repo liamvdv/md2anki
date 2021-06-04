@@ -1,10 +1,32 @@
 # md2anki
-This is a simple script I wrote to test some programming patterns and prototype this idea.
-There is a lot of room for improvement, especially when it comes to how I handle strings.
-In particular, I should not use the bufio.Scanner but rather a custom implementation and then work
-with byte slices all the way through. Where that is to difficult, I should use strings.Builder.
+This is not a full featured script. Consider it a simple script to convert [notion](https://www.notion.so/) pages into Anki flashcards. Specifically, md2Anki only looks at 2 blocks:
+1) Toggles
+2) Headings
 
+The algorithm will find all the toggles and use the "title" as the front and the body as the back side.
+The headings will be converted to tags. For that, spaces will become underscores. A note only gets the tag of the last heading and all heading levels above (see example below). This adheres to the logical structure of headings. 
+Example:
+```
+h1: ABC
+...
+toggles have tag: ABC
+...
+h2: b
+...
+toggles have tags: ABC b
+...
+h3: more detailed 
+...
+toggles have tags: ABC b more_detailed
+...
+h2: c
+...
+toggles have tags: ABC c   # note that the h3 tag was dropped and the h2 tag replaced.
+...
 
-## Gotchas
-Tags are carried over from the first declaration. You must add the @tag at line
-start, but do not have to type it out.
+h1: DEF
+...
+toggles have tag: DEF   # note that the h2 tag was dropped and the h1 tag replaced.
+...
+
+``` 
