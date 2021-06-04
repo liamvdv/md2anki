@@ -29,4 +29,16 @@ h1: DEF
 toggles have tag: DEF   # note that the h2 tag was dropped and the h1 tag replaced.
 ...
 
-``` 
+```
+
+## Usage on Linux
+First build the tool with go@1.16=<
+```
+$ go build -o md2anki main.go toggle.go
+```
+Then use with
+```
+$ ./md2anki <filepath to exported notion page>
+```
+It will open the default editor (nano, vim requires emulated terminal) and allow the user to modify the cards before they will be added to the importable file. The filename will be the `"{page_name}.txt"`.
+To skip a note, type "skip" at the start of the file or delete the whole content and save.
