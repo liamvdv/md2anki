@@ -59,24 +59,9 @@ md:
 
 */
 
-// regexp docs:
-// If 'Submatch' is present, the return value is a slice identifying the
-// successive submatches of the expression. Submatches are matches of
-// parenthesized subexpressions (also known as capturing groups) within the
-// regular expression, numbered from left to right in order of opening
-// parenthesis. Submatch 0 is the match of the entire expression, submatch 1 the
-// match of the first parenthesized subexpression, and so on.
-
-// If 'Index' is present, matches and submatches are identified by byte index
-// pairs within the input string: result[2*n:2*n+1] identifies the indexes of
-// the nth submatch. The pair for n==0 identifies the match of the entire
-// expression. If 'Index' is not present, the match is identified by the text of
-// the match/submatch. If an index is negative or text is nil, it means that
-// subexpression did not match any string in the input. For 'String' versions an
-// empty string means either no match or an empty match
-
 type tag struct {
-	// spaces will be replaced with underscores, quotes must be omitted.
+	// name can contain spaces, which will be replaced with underscores, quotes
+	// must be omitted.
 	// see https://anki.tenderapp.com/discussions/ankidesktop/28088-which-characters-can-tags-contain
 	name []byte
 
@@ -99,8 +84,6 @@ const INDENT = `[\t| {4}]`
 var (
 	// headingExp will be called with Submatch method, idx 1 returns the heading
 	// with # and without NL.
-	// BUG(liamvdv): We need to check if this is in a code block. Python
-	// comments should not be treated as headings!
 	/* heading matches:
 	...
 	# foo bar foo2
@@ -116,8 +99,6 @@ var (
 	*/
 	headingExp = `(#{1,3}\s.+)` + NL
 
-	// BUG(liamvdv): need to check that prior character to dash is not \t so that
-	// nested toggles are not treated as different notes. `(?!\t)?`... aka: not have a \t before it.
 	/* toggle matches:
 	....
 	- foo bar foo2
@@ -324,6 +305,7 @@ func newTag(bs []byte) tag {
 func combine(raw []byte, headings <-chan [2]int, toggles <-chan [4]int, cards chan<- card2, errc chan<- error, wg *sync.WaitGroup) {
 	stack := tagStack{}
 
+	// TODO(liamvdv): how could this be pipelined?
 	var hs [][2]int
 	for h := range headings {
 		hs = append(hs, h)
@@ -379,15 +361,12 @@ func init() {
 		nl    = []byte{'\n'}
 	)
 	fill := func(dst []byte, srcs ...[]byte) int {
-		// var off int
 		for i := range srcs {
-			// l := len(srcs[i])
-			// copy(dst[off:off+l], subsep)
-			// off += l
 			dst = append(dst, srcs[i]...)
 		}
 		return len(dst)
 	}
+
 	frontSep = make([]byte, 0, 2*len(subsep)+len(front)+1)
 	n := fill(frontSep, subsep, front, subsep, nl)
 	frontSep = frontSep[0:n]
@@ -412,16 +391,13 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) 
 	cmd := getCmd(fp)
 	exe := exec.Command(cmd[0], cmd[1:]...)
 	for card := range cards {
-		// write to file
 		if err := createPrompt(fp, &card); err != nil {
 			log.Panic(err)
 		}
 
-		// run editor and allow user to make edits
 		exec := *exe
 		runCommand(&exec)
 
-		// read from file
 		cs, err := readPrompt(fp)
 		if err != nil {
 			if err == skipNote {
@@ -441,7 +417,6 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) 
 }
 
 // does not yet support vim, vim needs terminal emulated (shell)
-// var defaultEditor = "code"
 var (
 	windowsEditor = "notepad.exe"
 
@@ -639,11 +614,6 @@ func process(fp string) {
 }
 
 func testPattern() error {
-	// headings: for grep it works with "^#\{1,3\}\\s.\+$", escape {} and + because of shell.
-	// 			and grep -E "^#{1,3}\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
-	// 				BUT watchout: this pattern does not exclude the code blocks (python).
-	// toggle titles: grep -E "^-\\s(.+)$" tmux\ e8fe4b2ab4994109b56d915e7df0194f.md
-
 	tog := `
 - How to switch to a certain window (labelled with a number)
 
