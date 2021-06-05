@@ -168,7 +168,7 @@ func (c card2) String() string {
 }
 
 // Process is the many entry point which turns a file into an importable anki deck.
-func Process(fp string) error {
+func Process(fp string, mutations ...options) error {
 	raw, err := os.ReadFile(fp)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func Process(fp string) error {
 	go findHeadings(raw, hIdxc, &wg)
 	go findToggles(raw, tIdxc, &wg)
 	go combine(raw, hIdxc, tIdxc, cards, errc, &wg)
-	go Prompter(cards, editedCards, &wg)
+	go Prompter(cards, editedCards, &wg, mutations...)
 	go Serialiser(filename, editedCards, &wg)
 	wg.Wait()
 
@@ -380,7 +380,7 @@ func init() {
 	tagsSep = tagsSep[0:n]
 }
 
-func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) {
+func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup, mutations ...options) {
 	name := "note.txt"
 	dp, err := os.Getwd()
 	if err != nil {
@@ -388,9 +388,14 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup) 
 	}
 	fp := filepath.Join(dp, name)
 
+	doMutations := yieldDoMutation(mutations...)
+
 	cmd := getCmd(fp)
 	exe := exec.Command(cmd[0], cmd[1:]...)
 	for card := range cards {
+		// apply patches such as converting to mathjax format.
+		doMutations(&card)
+
 		if err := createPrompt(fp, &card); err != nil {
 			log.Panic(err)
 		}
@@ -576,6 +581,38 @@ func Serialiser(fp string, cards <-chan card2, wg *sync.WaitGroup) {
 	}
 	log.Printf("Done. Added %d cards to %q.\n", n, fp)
 	wg.Done()
+}
+
+type options int
+
+const (
+	// Add options here.
+	toMathJax options = 1 << iota
+)
+
+func yieldDoMutation(mutations ...options) func(c *card2) {
+	if len(mutations) == 0 {
+		return func(c *card2) { return }
+	}
+
+	return func(c *card2) {
+		for _, mu := range mutations {
+			switch mu {
+			case toMathJax:
+				// turn $$...$$ into \(...\)
+				mlPattern := `\$\$(.+?)\$\$`
+				mlRe := regexp.MustCompile(mlPattern)
+				c.front = mlRe.ReplaceAll(c.front, []byte(`\[$1\]`))
+				c.back = mlRe.ReplaceAll(c.back, []byte(`\[$1\]`))
+				
+				// turn $...$ into \(...\)
+				slPattern := `\$(.+?)\$`
+				slRe := regexp.MustCompile(slPattern)
+				c.front = slRe.ReplaceAll(c.front, []byte(`\($1\)`))
+				c.back = slRe.ReplaceAll(c.back, []byte(`\($1\)`))				
+			}
+		}
+	}
 }
 
 // test func
