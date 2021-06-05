@@ -525,7 +525,9 @@ func readPrompt(fp string) ([]card2, error) {
 		start, end = end+len(tagsSep), idxs[7]
 		card.tags = bytes.Split(raw[start:end], []byte{'\n'})
 
-		fmt.Println(card)
+		if VERBOSE {
+			log.Println(card)
+		}
 		cards = append(cards, card)
 	}
 
@@ -588,6 +590,7 @@ type options int
 const (
 	// Add options here.
 	toMathJax options = 1 << iota
+	includeMedia
 )
 
 func yieldDoMutation(mutations ...options) func(c *card2) {
@@ -610,6 +613,13 @@ func yieldDoMutation(mutations ...options) func(c *card2) {
 				slRe := regexp.MustCompile(slPattern)
 				c.front = slRe.ReplaceAll(c.front, []byte(`\($1\)`))
 				c.back = slRe.ReplaceAll(c.back, []byte(`\($1\)`))				
+			case includeMedia:
+				// turn ![somedir/somefile](somedir/somefile) to <img src="somedir_somefile">
+				// https://docs.ankiweb.net/importing.html
+				pattern := `!\[(.+)/(.+)\]\(.+\)` // split the dirpath and the basename of file.
+				re := regexp.MustCompile(pattern)
+				c.front = re.ReplaceAll(c.front, []byte(`<img src="${1}_${2}">`)) // provides scoping
+				c.back = re.ReplaceAll(c.back, []byte(`<img src="${1}_${2}">`))  //provides scoping
 			}
 		}
 	}
