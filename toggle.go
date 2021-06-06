@@ -387,6 +387,7 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup, 
 		log.Panic(err)
 	}
 	fp := filepath.Join(dp, name)
+	defer os.Remove(fp)  // omit error, possible because card doesn't run
 
 	doMutations := yieldDoMutation(mutations...)
 
@@ -413,9 +414,6 @@ func Prompter(cards <-chan card2, editedCards chan<- card2, wg *sync.WaitGroup, 
 		for _, card := range cs {
 			editedCards <- card
 		}
-	}
-	if err := os.Remove(fp); err != nil {
-		log.Panic(err)
 	}
 	close(editedCards)
 	wg.Done()

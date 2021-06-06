@@ -20,22 +20,29 @@ func main() {
 	var mutations []options
 	FlagToMathJax := flag.Bool("math", false, "convert to mathjax")
 	FlagIncludeMedia := flag.Bool("media", false, "include media")
+	
+	OnlyMedia := flag.Bool("only-media", false, "only move media files")
 
 	Verbose := flag.Bool("verbose", false, "see what is happening")
 
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Println("Usage: ./md2anki <filepath> [-math] [-media] [-verbose]")
+		fmt.Println("Usage:\n\t./md2anki <filepath> [-math] [-media] [-verbose]")
 		return
 	}
 
 	flag.CommandLine.Parse(os.Args[2:])
+	VERBOSE = *Verbose
+	if *OnlyMedia {
+		addMedia(os.Args[1])
+		return
+	}
+
 	if *FlagToMathJax {
 		mutations = append(mutations, toMathJax)
 	}
 	if *FlagIncludeMedia {
 		mutations = append(mutations, includeMedia)
 	}
-	VERBOSE = *Verbose
 
 	if err := Process(os.Args[1], mutations...); err != nil {
 		log.Fatal(err)
@@ -55,7 +62,7 @@ func addMedia(forFp string) {
 	ext := filepath.Ext(forFp)
 	exportedMediaDp := forFp[:len(forFp)-len(ext)]
 	if !exists(exportedMediaDp) {
-		fmt.Printf("Cannot locate the exported media folder. Tried: %q\n", exportedMediaDp)
+		fmt.Printf("Cannot locate the exported media folder. Tried %q\n", exportedMediaDp)
 		return
 	}
 
@@ -63,10 +70,12 @@ func addMedia(forFp string) {
 	defer func() {
 		if failed {
 			fmt.Printf(
-				`To add the media files manually, please locate your Anki2/collection.media folder.
-Now rename all files in the %s folder with the pattern foldername_filename.
+`To add the media files manually, please locate your Anki2/collection.media folder. See https://docs.ankiweb.net/files.html to learn how.
+Now rename all files in the %q folder with the pattern foldername_filename.
 Next, select them all and place them in the media folder. Do ONLY copy the files, not the folder.
-`, exportedMediaDp)
+Retry to move only the media files with:
+	./md2anki %q -only-media
+`, exportedMediaDp, forFp)
 		}
 	}()
 
