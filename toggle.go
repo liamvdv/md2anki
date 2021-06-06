@@ -17,7 +17,6 @@ import (
 	"sync"
 )
 
-var isWindows = runtime.GOOS == "windows"
 
 // https://github.com/google/re2/wiki/Syntax
 
@@ -439,7 +438,7 @@ func getCmd(fp string) (cmd []string) {
 	case "linux", "darwin":
 		if editor := os.Getenv("EDITOR"); editor != "" {
 			if editor == "vi" || editor == "vim" {
-				fmt.Println("md2Anki does not currently support vim, because vim requires an emulated terminal.")
+				fmt.Printf("%s does not currently support vim, because vim requires an emulated terminal.", NAME)
 			} else {
 				linuxEditor = editor
 			}
@@ -623,75 +622,8 @@ func yieldDoMutation(mutations ...options) func(c *card2) {
 	}
 }
 
-// test func
-func process(fp string) {
-	raw, err := os.ReadFile(fp)
-	if err != nil {
-		log.Panic(err)
+func saveClose(f io.Closer) {
+	if err := f.Close(); err != nil {
+		panic(err)
 	}
-	hr := regexp.MustCompile(headingExp)
-	hMatches := hr.FindAllSubmatch(raw, -1)
-	idxMatches := hr.FindAllSubmatchIndex(raw, -1)
-	fmt.Println("Heading matches:", len(hMatches))
-	fmt.Println(idxMatches)
-	for _, match := range hMatches {
-		// match is an array of the found matches as bytes.
-		for _, s := range match {
-			fmt.Printf("%q\n", string(s))
-		}
-		// build tag stack... need order of regexp... use index? and then describe the underlying raw data?
-	}
-
-	tr := regexp.MustCompile(toggleExp)
-	tMatches := tr.FindAllSubmatch(raw, -1)
-	idxMatches = tr.FindAllSubmatchIndex(raw, -1)
-	fmt.Println(idxMatches)
-	fmt.Println("toggle matches:")
-	for _, match := range tMatches {
-		// match is an array of the found matches as bytes.
-		for _, s := range match {
-			fmt.Printf("%q\n", string(s))
-		}
-		// build tag stack... need order of regexp... use index? and then describe the underlying raw data?
-	}
-
-	fmt.Printf("%#v\n", string(raw))
-}
-
-func testPattern() error {
-	tog := `
-- How to switch to a certain window (labelled with a number)
-
-	first, you need to finish work. 
-	Then you can go home.
-
-- How to switch to another pane
-
-	<ident>
-
-`
-	tr := regexp.MustCompile(toggleExp)
-	fmt.Println("Match toggle:")
-	fmt.Printf("Pattern: %q\n", tr.String())
-	fmt.Printf("Search: %#v\n", tog)
-	fmt.Println("Matches:")
-	for _, slice := range tr.FindAllStringSubmatch(tog, -1) {
-		fmt.Printf("%#v\n", slice)
-	}
-
-	head := `
-# Terminal multiplexer
-bar foo
-## Modes
-### Commands foo bar 
-`
-
-	hr := regexp.MustCompile(headingExp)
-	fmt.Println("\nMatch heading:")
-	fmt.Printf("Pattern: %q\n", hr.String())
-	fmt.Printf("Search: %#v\n", head)
-	hMatches := hr.FindAllStringSubmatch(head, -1)
-	fmt.Printf("Matches: %#v\n", hMatches)
-	fmt.Printf("%v\n", headingToTag([]byte(hMatches[0][0]))) // not 0, 0 is full string
-	return nil
 }
