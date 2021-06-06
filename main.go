@@ -17,12 +17,14 @@ import (
 //		go build -o md2anki.exe main.go toggle.go
 
 var NAME string
+var CallPrefix string
 
 func init() {
 	switch runtime.GOOS {
 	case "windows":
 		NAME = "md2anki.exe"
 	case "linux", "darwin":
+		CallPrefix = "./"
 		NAME = "md2anki"
 	default:
 		log.Fatalf("%s is not a supported platform.", runtime.GOOS)
@@ -41,7 +43,7 @@ func main() {
 	Verbose := flag.Bool("verbose", false, "see what is happening")
 
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Printf("Usage:\n\t./%s <filepath> [-math] [-media] [-verbose]\n", NAME)
+		fmt.Printf("Usage:\n\t%s%s <filepath> [-math] [-media] [-verbose]\n", CallPrefix, NAME)
 		return
 	}
 
@@ -83,8 +85,8 @@ func addMedia(forFp string) {
 Now rename all files in the %q folder with the pattern foldername_filename.
 Next, select them all and place them in the media folder. Do ONLY copy the files, not the folder.
 Retry to move only the media files with:
-	./%s %q -only-media
-`, exportedMediaDp, NAME, forFp)
+	%s%s %q -only-media
+`, exportedMediaDp, CallPrefix, NAME, forFp)
 		}
 	}()
 

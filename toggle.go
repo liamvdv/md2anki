@@ -212,7 +212,7 @@ func findToggles(raw []byte, tc chan<- [4]int, wg *sync.WaitGroup) {
 		// bstart is the start of the body including identation.
 		off := idxs[0]
 		body := raw[off:idxs[1]]
-		sep := []byte("\n\n")
+		sep := []byte(NL + NL)
 		i := bytes.Index(body, sep)
 		if i == -1 {
 			// cannot occur.... still check
