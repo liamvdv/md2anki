@@ -106,6 +106,6 @@ bar foo
 	fmt.Printf("Search: %#v\n", head)
 	hMatches := hr.FindAllStringSubmatch(head, -1)
 	fmt.Printf("Matches: %#v\n", hMatches)
-	fmt.Printf("%v\n", headingToTag([]byte(hMatches[0][0]))) // not 0, 0 is full string
+	fmt.Printf("%v\n", newTag([]byte(hMatches[0][0]))) // not 0, 0 is full string
 	return nil
 }

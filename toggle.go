@@ -132,24 +132,6 @@ func MdToAnkiFilename(fp string) string {
 	return pageTitleToDeckName(fp) + ".txt"
 }
 
-// headingToTag expects the heading to not contain any the NL, i.e. only the capture group.
-func headingToTag(heading []byte) *tag {
-	tag := tag{}
-
-	for i, c := range heading {
-		switch c {
-		case '#':
-			tag.level++
-		case ' ', '\t', '\n', '\r', '\v', '\f':
-		default:
-			tag.name = bytes.ReplaceAll(heading[i:], []byte{' '}, []byte{'_'})
-			return &tag
-		}
-	}
-	log.Panicf("heading is empty or not a heading: %s", string(heading))
-	return nil
-}
-
 type card2 struct {
 	front []byte
 	back  []byte
