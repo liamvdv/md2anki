@@ -41,7 +41,7 @@ func main() {
 	Verbose := flag.Bool("verbose", false, "see what is happening")
 
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Printf("Usage:\n\t./%s <filepath> [-math] [-media] [-verbose]", NAME)
+		fmt.Printf("Usage:\n\t./%s <filepath> [-math] [-media] [-verbose]\n", NAME)
 		return
 	}
 

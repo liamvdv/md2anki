@@ -1,4 +1,6 @@
-*.txt
-*.md
-/*
+*
+
+!.gitignore
+!*.go
 !README.md
+!build.sh
