@@ -159,7 +159,7 @@ Retry to move only the media files with:
 		oldFp := filepath.Join(exportedMediaDp, name)
 		newName := exportedDirname + "_" + name
 		// location of media files url escaped by notion, thus in note links.
-		newFp := strings.Replace(filepath.Join(dp, newName), " ", "%20", -1) 
+		newFp := strings.Replace(filepath.Join(dp, newName), " ", "%20", -1)
 
 		if VERBOSE {
 			log.Printf("mv %q %q\n", oldFp, newFp)
