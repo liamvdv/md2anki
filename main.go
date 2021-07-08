@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+    "bufio"
 )
 
 // Linux, Darwin:
@@ -141,9 +142,12 @@ Retry to move only the media files with:
 	}
 	var username string
 	fmt.Println("What is your Anki profile name?")
-	_, _ = fmt.Scanln(&username)
+    scanner := bufio.NewScanner(os.Stdin)
+    if scanner.Scan() {
+        username = scanner.Text()
+    }
 
-	dp = filepath.Join(dp, username, "collection.media")
+    dp = filepath.Join(dp, username, "collection.media")
 	if !exists(dp) {
 		fmt.Printf("Could not find mediapath %q.\n", dp)
 		return
