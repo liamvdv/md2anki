@@ -1,4 +1,7 @@
 # md2anki
+🛑 This **is not and will not be maintained** anymore! There is a significantly better alternative for notion to flashcards: [zorbi.cards](https://zorbi.cards) 🛑
+
+# About
 This is a script to convert Notion toggles to Anki flashcards. The supported format is limited to front and back with tags. Tags are deduced from the headings, see more on that below. It supports media and math conversions. Additionally, it runs on 
 - Windows
 - Linux and
@@ -78,4 +81,4 @@ toggles have tag: DEF   # note that the h2 tag was dropped and the h1 tag replac
 ```
 
 ## Feedback
-If you find any bugs, please open a GitHub issue. If it saved you any time, please consider liking the project. Thank you and have fun.
+If you find any bugs, please open a GitHub issue. If it saved you any time, please consider starring the project. Thank you and have fun.
